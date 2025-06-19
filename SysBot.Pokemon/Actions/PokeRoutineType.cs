@@ -44,6 +44,8 @@ public enum PokeRoutineType
     RemoteControl = 6_000,
 
     // Add your own custom bots here, so they don't clash for future main-branch bot releases.
+
+    TrainerIdResetter = 7_000,
 }
 
 public static class PokeRoutineTypeExtensions

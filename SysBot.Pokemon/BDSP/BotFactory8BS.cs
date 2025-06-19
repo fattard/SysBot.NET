@@ -1,4 +1,4 @@
-﻿using PKHeX.Core;
+using PKHeX.Core;
 using System;
 
 namespace SysBot.Pokemon;
@@ -14,6 +14,8 @@ public sealed class BotFactory8BS : BotFactory<PB8>
 
         PokeRoutineType.RemoteControl => new RemoteControlBotBS(cfg),
 
+        PokeRoutineType.TrainerIdResetter => new TrainerIdResetterBotBDSP(cfg),
+
         _ => throw new ArgumentException(nameof(cfg.NextRoutineType)),
     };
 
@@ -25,6 +27,8 @@ public sealed class BotFactory8BS : BotFactory<PB8>
             => true,
 
         PokeRoutineType.RemoteControl => true,
+
+        PokeRoutineType.TrainerIdResetter => true,
 
         _ => false,
     };

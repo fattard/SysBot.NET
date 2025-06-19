@@ -15,6 +15,8 @@ public sealed class BotFactory8LA : BotFactory<PA8>
 
         PokeRoutineType.RemoteControl => new RemoteControlBotLA(cfg),
 
+        PokeRoutineType.TrainerIdResetter => new TrainerIdResetterBot8LA(cfg),
+
         _ => throw new ArgumentException(nameof(cfg.NextRoutineType)),
     };
 
@@ -27,6 +29,8 @@ public sealed class BotFactory8LA : BotFactory<PA8>
             => true,
 
         PokeRoutineType.RemoteControl => true,
+
+        PokeRoutineType.TrainerIdResetter => true,
 
         _ => false,
     };

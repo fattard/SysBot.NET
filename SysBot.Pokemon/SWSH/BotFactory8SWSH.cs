@@ -1,4 +1,4 @@
-﻿using PKHeX.Core;
+using PKHeX.Core;
 using System;
 
 namespace SysBot.Pokemon;
@@ -23,6 +23,9 @@ public sealed class BotFactory8SWSH : BotFactory<PK8>
         PokeRoutineType.DogBot => new EncounterBotDogSWSH(cfg, Hub),
 
         PokeRoutineType.RemoteControl => new RemoteControlBotSWSH(cfg),
+
+        PokeRoutineType.TrainerIdResetter => new TrainerIdResetterBotSWSH(cfg),
+
         _ => throw new ArgumentException(nameof(cfg.NextRoutineType)),
     };
 
@@ -44,6 +47,8 @@ public sealed class BotFactory8SWSH : BotFactory<PK8>
         PokeRoutineType.DogBot => true,
 
         PokeRoutineType.RemoteControl => true,
+
+        PokeRoutineType.TrainerIdResetter => true,
 
         _ => false,
     };

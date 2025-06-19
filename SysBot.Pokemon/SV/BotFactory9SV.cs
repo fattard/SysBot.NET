@@ -15,6 +15,8 @@ public sealed class BotFactory9SV : BotFactory<PK9>
 
         PokeRoutineType.RemoteControl => new RemoteControlBotSV(cfg),
 
+        PokeRoutineType.TrainerIdResetter => new TrainerIdResetterBotSV(cfg),
+
         _ => throw new ArgumentException(nameof(cfg.NextRoutineType)),
     };
 
@@ -27,6 +29,8 @@ public sealed class BotFactory9SV : BotFactory<PK9>
             => true,
 
         PokeRoutineType.RemoteControl => true,
+
+        PokeRoutineType.TrainerIdResetter => true,
 
         _ => false,
     };
