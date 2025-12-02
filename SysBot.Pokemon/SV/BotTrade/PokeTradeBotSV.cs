@@ -312,15 +312,7 @@ public class PokeTradeBotSV(PokeTradeHub<PK9> Hub, PokeBotState Config) : PokeRo
         {
             await Task.Delay(0_500, token).ConfigureAwait(false);
             if (++cnt > 20) // Didn't make it in after 10 seconds.
-            {
-                await Click(A, 1_000, token).ConfigureAwait(false); // Ensures we dismiss a popup.
-                if (!await RecoverToPortal(token).ConfigureAwait(false))
-                {
-                    Log("Failed to recover to portal.");
-                    await RecoverToOverworld(token).ConfigureAwait(false);
-                }
-                return PokeTradeResult.RecoverOpenBox;
-            }
+                return await RecoverOpenBox(token).ConfigureAwait(false);
         }
         await Task.Delay(3_000 + Hub.Config.Timings.ExtraTimeOpenBox, token).ConfigureAwait(false);
 
@@ -358,7 +350,7 @@ public class PokeTradeBotSV(PokeTradeHub<PK9> Hub, PokeBotState Config) : PokeRo
         // Wait for user input...
         var offered = await ReadUntilPresent(TradePartnerOfferedOffset, 25_000, 1_000, BoxFormatSlotSize, token).ConfigureAwait(false);
         var oldEC = await SwitchConnection.ReadBytesAbsoluteAsync(TradePartnerOfferedOffset, 8, token).ConfigureAwait(false);
-        if (offered == null || offered.Species < 1 || !offered.ChecksumValid)
+        if (offered == null || offered.Species == 0 || !offered.ChecksumValid)
         {
             Log("Trade ended because a valid Pokémon was not offered.");
             await ExitTradeToPortal(false, token).ConfigureAwait(false);
@@ -371,6 +363,13 @@ public class PokeTradeBotSV(PokeTradeHub<PK9> Hub, PokeBotState Config) : PokeRo
         {
             await ExitTradeToPortal(false, token).ConfigureAwait(false);
             return update;
+        }
+
+        if (Hub.Config.Trade.DisallowTradeEvolve && TradeEvolutions.WillTradeEvolve(offered.Species, offered.Form, offered.HeldItem, toSend.Species))
+        {
+            Log("Trade cancelled because trainer offered a Pokémon that would evolve upon trade.");
+            await ExitTradeToPortal(false, token).ConfigureAwait(false);
+            return PokeTradeResult.TradeEvolveNotAllowed;
         }
 
         Log("Confirming trade.");
@@ -389,7 +388,7 @@ public class PokeTradeBotSV(PokeTradeHub<PK9> Hub, PokeBotState Config) : PokeRo
             return PokeTradeResult.RoutineCancel;
         }
 
-        // Trade was Successful!
+        // Trade was successful!
         var received = await ReadPokemon(BoxStartOffset, BoxFormatSlotSize, token).ConfigureAwait(false);
         // Pokémon in b1s1 is same as the one they were supposed to receive (was never sent).
         if (SearchUtil.HashByDetails(received) == SearchUtil.HashByDetails(toSend) && received.Checksum == toSend.Checksum)
@@ -414,6 +413,17 @@ public class PokeTradeBotSV(PokeTradeHub<PK9> Hub, PokeBotState Config) : PokeRo
 
         await ExitTradeToPortal(false, token).ConfigureAwait(false);
         return PokeTradeResult.Success;
+    }
+
+    private async Task<PokeTradeResult> RecoverOpenBox(CancellationToken token)
+    {
+        await Click(A, 1_000, token).ConfigureAwait(false); // Ensures we dismiss a popup.
+        if (await RecoverToPortal(token).ConfigureAwait(false))
+            return PokeTradeResult.RecoverOpenBox;
+
+        Log("Failed to recover to portal.");
+        await RecoverToOverworld(token).ConfigureAwait(false);
+        return PokeTradeResult.RecoverOpenBox;
     }
 
     private void UpdateCountsAndExport(PokeTradeDetail<PK9> poke, PK9 received, PK9 toSend)
@@ -822,7 +832,7 @@ public class PokeTradeBotSV(PokeTradeHub<PK9> Hub, PokeBotState Config) : PokeRo
         var la = new LegalityAnalysis(offered);
         if (!la.Valid)
         {
-            Log($"Clone request (from {poke.Trainer.TrainerName}) has detected an invalid Pokémon: {GameInfo.GetStrings("en").Species[offered.Species]}.");
+            Log($"Clone request (from {poke.Trainer.TrainerName}) has detected an invalid Pokémon: {GetSpeciesName(offered.Species)}.");
             if (DumpSetting.Dump)
                 DumpPokemon(DumpSetting.DumpFolder, "hacked", offered);
 
@@ -838,8 +848,9 @@ public class PokeTradeBotSV(PokeTradeHub<PK9> Hub, PokeBotState Config) : PokeRo
         if (Hub.Config.Legality.ResetHOMETracker)
             clone.Tracker = 0;
 
-        poke.SendNotification(this, $"**Cloned your {GameInfo.GetStrings("en").Species[clone.Species]}!**\nNow press B to cancel your offer and trade me a Pokémon you don't want.");
-        Log($"Cloned a {GameInfo.GetStrings("en").Species[clone.Species]}. Waiting for user to change their Pokémon...");
+        var cloneSpecies = GetSpeciesName(clone.Species);
+        poke.SendNotification(this, $"**Cloned your {cloneSpecies}!**\nNow press B to cancel your offer and trade me a Pokémon you don't want.");
+        Log($"Cloned a {cloneSpecies}. Waiting for user to change their Pokémon...");
 
         // Separate this out from WaitForPokemonChanged since we compare to old EC from original read.
         var partnerFound = await ReadUntilChanged(TradePartnerOfferedOffset, oldEC, 15_000, 0_200, false, true, token).ConfigureAwait(false);
@@ -891,7 +902,7 @@ public class PokeTradeBotSV(PokeTradeHub<PK9> Hub, PokeBotState Config) : PokeRo
         else if (config.LedyQuitIfNoMatch)
         {
             var nickname = offered.IsNicknamed ? $" (Nickname: \"{offered.Nickname}\")" : string.Empty;
-            poke.SendNotification(this, $"No match found for the offered {GameInfo.GetStrings("en").Species[offered.Species]}{nickname}.");
+            poke.SendNotification(this, $"No match found for the offered {GetSpeciesName(offered.Species)}{nickname}.");
             return (toSend, PokeTradeResult.TrainerRequestBad);
         }
 

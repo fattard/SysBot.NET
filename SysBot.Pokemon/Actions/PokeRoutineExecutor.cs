@@ -2,7 +2,6 @@ using PKHeX.Core;
 using SysBot.Base;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -87,12 +86,12 @@ public abstract class PokeRoutineExecutor<T>(IConsoleBotManaged<IConsoleConnecti
     public async Task VerifyBotbaseVersion(CancellationToken token)
     {
         var data = await SwitchConnection.GetBotbaseVersion(token).ConfigureAwait(false);
-        var version = decimal.TryParse(data, CultureInfo.InvariantCulture, out var v) ? v : 0;
-        if (version < BotbaseVersion)
+        var version = System.Version.TryParse(data, out var v) ? v : null;
+        if (version < BotbaseVersion || version is null)
         {
             var protocol = Config.Connection.Protocol;
             var msg = protocol is SwitchProtocol.WiFi ? "sys-botbase" : "usb-botbase";
-            msg += $" version is not supported. Expected version {BotbaseVersion} or greater, and current version is {version}. Please download the latest version from: ";
+            msg += $" version is not supported. Expected version {BotbaseVersion} or greater, and your current version is {data}. Please download the latest version from: ";
             if (protocol is SwitchProtocol.WiFi)
                 msg += "https://github.com/olliz0r/sys-botbase/releases/latest";
             else
@@ -110,10 +109,10 @@ public abstract class PokeRoutineExecutor<T>(IConsoleBotManaged<IConsoleConnecti
         Log("Trainer data is not valid.");
 
         bool found = false;
-        var msg = "";
+        var msg = "Found ";
         if (await SwitchConnection.IsProgramRunning(ovlloaderID, token).ConfigureAwait(false))
         {
-            msg += "Found Tesla Menu";
+            msg += "Tesla Menu";
             found = true;
         }
 
@@ -124,6 +123,7 @@ public abstract class PokeRoutineExecutor<T>(IConsoleBotManaged<IConsoleConnecti
             msg += "dmnt (cheat codes?)";
             found = true;
         }
+
         if (found)
         {
             msg += ".";
@@ -148,7 +148,7 @@ public abstract class PokeRoutineExecutor<T>(IConsoleBotManaged<IConsoleConnecti
             if (AbuseSettings.BlockDetectedBannedUser && bot is PokeRoutineExecutor8SWSH)
                 await BlockUser(token).ConfigureAwait(false);
 
-            var msg = $"{user.TrainerName}{useridmsg} is a banned user, and was encountered in-game using OT: {TrainerName}.";
+            var msg = $"{user.TrainerName}{useridmsg} is a banned user and was encountered in-game using OT: {TrainerName}.";
             if (!string.IsNullOrWhiteSpace(entry.Comment))
                 msg += $"\nUser was banned for: {entry.Comment}";
             if (!string.IsNullOrWhiteSpace(AbuseSettings.BannedIDMatchEchoMention))
@@ -169,7 +169,7 @@ public abstract class PokeRoutineExecutor<T>(IConsoleBotManaged<IConsoleConnecti
             if (cd != 0 && TimeSpan.FromMinutes(cd) > delta)
             {
                 var wait = TimeSpan.FromMinutes(cd) - delta;
-                poke.Notifier.SendNotification(bot, poke, $"You are still on trade cooldown, and cannot trade for another {wait.TotalMinutes:F1} minute(s).");
+                poke.Notifier.SendNotification(bot, poke, $"You are still on trade cooldown and cannot trade for another {wait.TotalMinutes:F1} minute(s).");
                 var msg = $"Found {user.TrainerName}{useridmsg} ignoring the {cd} minute trade cooldown. Last encountered {delta.TotalMinutes:F1} minutes ago.";
                 if (AbuseSettings.EchoNintendoOnlineIDCooldown)
                     msg += $"\nID: {TrainerNID}";

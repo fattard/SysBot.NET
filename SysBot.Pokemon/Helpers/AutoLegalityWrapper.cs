@@ -1,9 +1,9 @@
 using PKHeX.Core;
 using PKHeX.Core.AutoMod;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
 
 namespace SysBot.Pokemon;
 
@@ -21,7 +21,6 @@ public static class AutoLegalityWrapper
 
     private static void InitializeAutoLegality(LegalitySettings cfg)
     {
-        InitializeCoreStrings();
         EncounterEvent.RefreshMGDB(cfg.MGDBPath);
         InitializeTrainerDatabase(cfg);
         InitializeSettings(cfg);
@@ -39,8 +38,8 @@ public static class AutoLegalityWrapper
         Legalizer.EnableEasterEggs = cfg.EnableEasterEggs;
         APILegality.AllowTrainerOverride = cfg.AllowTrainerDataOverride;
         APILegality.AllowBatchCommands = cfg.AllowBatchCommands;
-        APILegality.PrioritizeGame = cfg.PrioritizeGame;
-        APILegality.PrioritizeGameVersion = cfg.PrioritizeGameVersion;
+        APILegality.GameVersionPriority = cfg.GameVersionPriority;
+        cfg.PriorityOrder = APILegality.PriorityOrder = SanitizePriorityOrder(cfg.PriorityOrder); // Clean this up because user can add duplicate or invalid entries.
         APILegality.SetBattleVersion = cfg.SetBattleVersion;
         APILegality.Timeout = cfg.Timeout;
 
@@ -58,6 +57,20 @@ public static class AutoLegalityWrapper
         cfg.PrioritizeEncounters.AddRange(missing);
         cfg.PrioritizeEncounters = cfg.PrioritizeEncounters.Distinct().ToList(); // Don't allow duplicates.
         EncounterMovesetGenerator.PriorityList = cfg.PrioritizeEncounters;
+    }
+
+    private static List<GameVersion> SanitizePriorityOrder(List<GameVersion> versionList)
+    {
+        var validVersions = Enum.GetValues<GameVersion>().Where(GameUtil.IsValidSavedVersion).Reverse().ToList();
+
+        foreach (var ver in validVersions)
+        {
+            if (!versionList.Contains(ver))
+                versionList.Add(ver); // Add any missing versions.
+        }
+
+        // Remove any versions in versionList that are not in validVersions and clean up duplicates in the process.
+        return [.. versionList.Intersect(validVersions)];
     }
 
     private static void InitializeTrainerDatabase(LegalitySettings cfg)
@@ -102,23 +115,14 @@ public static class AutoLegalityWrapper
             OT = fallback.OT,
             Generation = generation,
         };
-        var exist = TrainerSettings.GetSavedTrainerData(version, generation, fallback);
+        var exist = TrainerSettings.GetSavedTrainerData(generation, version, fallback);
         if (exist is SimpleTrainerInfo) // not anything from files; this assumes ALM returns SimpleTrainerInfo for non-user-provided fake templates.
             TrainerSettings.Register(fallback);
     }
 
-    private static void InitializeCoreStrings()
+    public static bool CanBeTraded(this PKM pk, IEncounterTemplate enc)
     {
-        var lang = Thread.CurrentThread.CurrentCulture.TwoLetterISOLanguageName[..2];
-        LocalizationUtil.SetLocalization(typeof(LegalityCheckStrings), lang);
-        LocalizationUtil.SetLocalization(typeof(MessageStrings), lang);
-        RibbonStrings.ResetDictionary(GameInfo.Strings.ribbons);
-        ParseSettings.ChangeLocalizationStrings(GameInfo.Strings.movelist, GameInfo.Strings.specieslist);
-    }
-
-    public static bool CanBeTraded(this PKM pk)
-    {
-        if (pk.IsNicknamed)
+        if (pk.IsNicknamed && enc is not IFixedNickname {IsFixedNickname: true})
         {
             Span<char> nick = stackalloc char[pk.TrashCharCountNickname];
             int len = pk.LoadString(pk.NicknameTrash, nick);
@@ -130,23 +134,27 @@ public static class AutoLegalityWrapper
             Span<char> ot = stackalloc char[pk.TrashCharCountTrainer];
             int len = pk.LoadString(pk.OriginalTrainerTrash, ot);
             ot = ot[..len];
-            if (StringsUtil.IsSpammyString(ot) && !IsFixedOT(new LegalityAnalysis(pk).EncounterOriginal, pk))
+            if (StringsUtil.IsSpammyString(ot) && !IsFixedOT(enc, pk))
                 return false;
         }
-        return !FormInfo.IsFusedForm(pk.Species, pk.Form, pk.Format);
+        if (TradeRestrictions.IsUntradableHeld(pk.Context, pk.HeldItem))
+            return false;
+        return !TradeRestrictions.IsUntradable(pk.Species, pk.Form, pk is IFormArgument f ? f.FormArgument : 0, pk.Format);
     }
 
     public static bool IsFixedOT(IEncounterTemplate t, PKM pkm) => t switch
     {
         IFixedTrainer { IsFixedTrainer: true } => true,
+        EncounterGift9a { Trainer: not 0 } => true, // todo ZA DLC: remove me, implicitly covered by IFixedTrainer
         MysteryGift g => !g.IsEgg && g switch
         {
+            WA9 wa9 => wa9.GetHasOT(pkm.Language),
             WC9 wc9 => wc9.GetHasOT(pkm.Language),
             WA8 wa8 => wa8.GetHasOT(pkm.Language),
             WB8 wb8 => wb8.GetHasOT(pkm.Language),
             WC8 wc8 => wc8.GetHasOT(pkm.Language),
             WB7 wb7 => wb7.GetHasOT(pkm.Language),
-            { Generation: >= 5 } gift => gift.OriginalTrainerName.Length > 0,
+            { Generation: >= 5 } => g.OriginalTrainerName.Length > 0,
             _ => true,
         },
         _ => false,
@@ -155,13 +163,15 @@ public static class AutoLegalityWrapper
     public static ITrainerInfo GetTrainerInfo<T>() where T : PKM, new()
     {
         if (typeof(T) == typeof(PK8))
-            return TrainerSettings.GetSavedTrainerData(GameVersion.SWSH, 8);
+            return TrainerSettings.GetSavedTrainerData(GameVersion.SWSH);
         if (typeof(T) == typeof(PB8))
-            return TrainerSettings.GetSavedTrainerData(GameVersion.BDSP, 8);
+            return TrainerSettings.GetSavedTrainerData(GameVersion.BDSP);
         if (typeof(T) == typeof(PA8))
-            return TrainerSettings.GetSavedTrainerData(GameVersion.PLA, 8);
+            return TrainerSettings.GetSavedTrainerData(GameVersion.PLA);
         if (typeof(T) == typeof(PK9))
-            return TrainerSettings.GetSavedTrainerData(GameVersion.SV, 9);
+            return TrainerSettings.GetSavedTrainerData(GameVersion.SV);
+        if (typeof(T) == typeof(PA9))
+            return TrainerSettings.GetSavedTrainerData(GameVersion.ZA);
 
         throw new ArgumentException("Type does not have a recognized trainer fetch.", typeof(T).Name);
     }

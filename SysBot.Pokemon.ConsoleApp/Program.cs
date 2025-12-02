@@ -4,7 +4,6 @@ using SysBot.Pokemon.Z3;
 using System;
 using System.IO;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace SysBot.Pokemon.ConsoleApp;
 
@@ -50,10 +49,6 @@ public static class Program
         Console.ReadKey();
     }
 }
-
-[JsonSerializable(typeof(ProgramConfig))]
-[JsonSourceGenerationOptions(WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
-public sealed partial class ProgramConfigContext : JsonSerializerContext;
 
 public static class BotContainer
 {
@@ -119,6 +114,7 @@ public static class BotContainer
         ProgramMode.BDSP => new PokeBotRunnerImpl<PB8>(prog.Hub, new BotFactory8BS()),
         ProgramMode.LA   => new PokeBotRunnerImpl<PA8>(prog.Hub, new BotFactory8LA()),
         ProgramMode.SV   => new PokeBotRunnerImpl<PK9>(prog.Hub, new BotFactory9SV()),
+        ProgramMode.LZA  => new PokeBotRunnerImpl<PA9>(prog.Hub, new BotFactory9LZA()),
         _ => throw new IndexOutOfRangeException("Unsupported mode."),
     };
 
